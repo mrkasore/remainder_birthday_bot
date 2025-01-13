@@ -8,6 +8,13 @@ main = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
+choose_edit = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text='Изменить ФИО', callback_data='change_fio')],
+        [InlineKeyboardButton(text='Изменить дату', callback_data='change_date')],
+    ]
+)
+
 def generate_edit_keyboard(record_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[

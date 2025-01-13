@@ -14,6 +14,10 @@ class AddDate(StatesGroup):
     fio = State()
     date = State()
 
+class EditBirthdayState(StatesGroup):
+    waiting_for_fio = State()
+    waiting_for_date = State()
+
 class EditCallbackData(CallbackData, prefix="edit"):
     record_id: int
 
@@ -35,7 +39,7 @@ async def add_birthday_event(message: Message, state: FSMContext):
 async def add_fio(message: Message, state: FSMContext):
     await state.update_data(fio=message.text)
     await state.set_state(AddDate.date)
-    await message.answer('Введите дату роджения')
+    await message.answer('Введите дату роджения (ГГГГ-ММ-ДД)')
 
 @router.message(AddDate.date)
 async def add_date(message: Message, state: FSMContext):
@@ -57,12 +61,41 @@ async def get_all_birthdays(message: Message):
         await message.answer(res_row, reply_markup = kb.generate_edit_keyboard(birthday['id']))
 
 @router.callback_query(EditCallbackData.filter())
-async def edit_birthday_callback(callback_query: CallbackQuery, callback_data: EditCallbackData):
+async def edit_birthday_callback(callback_query: CallbackQuery, callback_data: EditCallbackData, state: FSMContext):
     record_id = callback_data.record_id
     record = await db.get_birthday(record_id)
     res_message = await get_current_birthday_row(record)
-    await callback_query.message.answer(f"Редактируем запись:\n{res_message}")
+    await callback_query.message.answer(f"Редактируем запись:\n{res_message}", reply_markup=kb.choose_edit)
     await callback_query.answer()
+    await state.update_data(record_id=record_id)
+
+@router.callback_query(F.data == 'change_fio')
+async def change_fio(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text('Введите новое ФИО')
+    await state.set_state(EditBirthdayState.waiting_for_fio)
+    await callback.answer()
+
+@router.callback_query(F.data == 'change_date')
+async def change_fio(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text('Введите новую дату (ГГГГ-ММ-ДД)')
+    await state.set_state(EditBirthdayState.waiting_for_date)
+    await callback.answer()
+
+@router.message(EditBirthdayState.waiting_for_fio)
+async def process_new_fio(message: Message, state: FSMContext):
+    new_fio = message.text
+    data = await state.get_data()
+    await db.update_data(data['record_id'], new_fio, 'fio')
+    await message.answer(f'Поле ФИО изменено на {new_fio}')
+    await state.clear()
+
+@router.message(EditBirthdayState.waiting_for_date)
+async def process_new_fio(message: Message, state: FSMContext):
+    new_date = message.text
+    data = await state.get_data()
+    await db.update_data(data['record_id'], new_date, 'date')
+    await message.answer(f'Поле даты изменено на {new_date}')
+    await state.clear()
 
 async def get_current_birthday_row(birthday):
     all_keys = {

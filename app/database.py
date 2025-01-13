@@ -55,3 +55,8 @@ async def get_birthday(record_id):
         res = dict(zip(columns, res))
         return res
 
+async def update_data(record_id, new_fio, column):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(f'UPDATE birthdays SET {column} = ? WHERE id = ?',  (new_fio, record_id, ))
+        await db.commit()
+
