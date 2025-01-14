@@ -1,24 +1,20 @@
 import asyncio
-import os
-from dotenv import load_dotenv
 from aiogram import Dispatcher, Bot
 import logging
 
 from app.handlers import router
 from app import database as db
-
-load_dotenv()
+from app.bot import bot
 
 dp = Dispatcher()
-token = os.getenv('TOKEN')
-bot = Bot(token=token)
 
 async def on_startup():
     await db.db_start()
+    await db.get_all_data_to_scheduler()
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    await db.db_start()
+    await on_startup()
     dp.include_router(router)
     await dp.start_polling(bot)
 

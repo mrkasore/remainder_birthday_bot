@@ -18,6 +18,7 @@ choose_edit = InlineKeyboardMarkup(
 def generate_edit_keyboard(record_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text='Редактировать', callback_data=f'edit:{record_id}')]
+            [InlineKeyboardButton(text='Редактировать', callback_data=f'edit:{record_id}')],
+            [InlineKeyboardButton(text='Удалить', callback_data=f'delete:{record_id}')]
         ]
     )

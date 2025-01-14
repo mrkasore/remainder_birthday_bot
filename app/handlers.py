@@ -21,14 +21,22 @@ class EditBirthdayState(StatesGroup):
 class EditCallbackData(CallbackData, prefix="edit"):
     record_id: int
 
+class DeleteCallbackData(CallbackData, prefix="delete"):
+    record_id: int
+
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     await db.create_user(message.from_user.full_name, message.from_user.id)
-    await message.answer('Привет!', reply_markup = kb.main)
+    await message.answer(f'Привет, {str(message.from_user.full_name)}!', reply_markup = kb.main)
 
 @router.message(Command('help'))
 async def get_help(message: Message):
-    await message.answer('Помощь')
+    await message.answer(
+        "👋 Привет! Я бот для управления днями рождения.\n\n"
+        "Вот список доступных команд:\n"
+        "/start - Начать работу с ботом\n"
+        "/help - Получить справочную информацию\n"
+    )
 
 @router.message(F.text == 'Добавить дату')
 async def add_birthday_event(message: Message, state: FSMContext):
@@ -47,7 +55,7 @@ async def add_date(message: Message, state: FSMContext):
     data = await state.get_data()
     user_id = await db.get_user_id(message.from_user.id)
     if user_id:
-        await db.add_birthday_db(data["fio"], data["date"], user_id)
+        await db.add_birthday_db(data["fio"], data["date"], user_id, message.from_user.id)
         await message.answer(f'ФИО: {data["fio"]}\n'
         f'Дата Рождения: {data["date"]}')
     await state.clear()
@@ -76,7 +84,7 @@ async def change_fio(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 @router.callback_query(F.data == 'change_date')
-async def change_fio(callback: CallbackQuery, state: FSMContext):
+async def change_date(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text('Введите новую дату (ГГГГ-ММ-ДД)')
     await state.set_state(EditBirthdayState.waiting_for_date)
     await callback.answer()
@@ -85,7 +93,7 @@ async def change_fio(callback: CallbackQuery, state: FSMContext):
 async def process_new_fio(message: Message, state: FSMContext):
     new_fio = message.text
     data = await state.get_data()
-    await db.update_data(data['record_id'], new_fio, 'fio')
+    await db.update_data(data['record_id'], new_fio, 'fio', message.from_user.id)
     await message.answer(f'Поле ФИО изменено на {new_fio}')
     await state.clear()
 
@@ -93,9 +101,19 @@ async def process_new_fio(message: Message, state: FSMContext):
 async def process_new_fio(message: Message, state: FSMContext):
     new_date = message.text
     data = await state.get_data()
-    await db.update_data(data['record_id'], new_date, 'date')
+    await db.update_data(data['record_id'], new_date, 'date', message.from_user.id)
     await message.answer(f'Поле даты изменено на {new_date}')
     await state.clear()
+
+@router.callback_query(DeleteCallbackData.filter())
+async def delete_birthday_callback(callback_query: CallbackQuery, callback_data: DeleteCallbackData):
+    record_id = callback_data.record_id
+    try:
+        await db.delete_date(record_id)
+        await callback_query.message.answer(f'Запись удалена ID - {record_id}')
+        await callback_query.answer()
+    except:
+        await callback_query.message.answer(f'Запись ID - {record_id} уже была удалена ранее')
 
 async def get_current_birthday_row(birthday):
     all_keys = {
@@ -110,4 +128,3 @@ async def get_current_birthday_row(birthday):
         res_row += f'{all_keys[key]}: {str(row)}\n'
 
     return res_row
-

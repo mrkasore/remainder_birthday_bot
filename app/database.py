@@ -1,4 +1,5 @@
 import aiosqlite
+import app.apsched as apsched
 
 DATABASE_PATH = 'database.db'
 
@@ -33,10 +34,12 @@ async def get_user_id(telegram_id):
         user_id = await cursor.fetchone()
         return user_id[0]
 
-async def add_birthday_db(fio, date, user_id):
+async def add_birthday_db(fio, date, user_id, telegram_user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute("INSERT INTO birthdays (fio, date, user_id) VALUES(?, ?, ?)", (fio, date, user_id))
+        cursor = await db.execute("INSERT INTO birthdays (fio, date, user_id) VALUES(?, ?, ?)", (fio, date, user_id))
         await db.commit()
+        id_birthday = cursor.lastrowid
+        await apsched.send_data_to_schedule(date, id_birthday, fio, telegram_user_id)
 
 async def get_all_dates(telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -45,6 +48,7 @@ async def get_all_dates(telegram_id):
         rows = await cursor.fetchall()
         columns = [column[0] for column in cursor.description]
         all_dates = [dict(zip(columns, row)) for row in rows]
+
         return all_dates
 
 async def get_birthday(record_id):
@@ -55,8 +59,34 @@ async def get_birthday(record_id):
         res = dict(zip(columns, res))
         return res
 
-async def update_data(record_id, new_fio, column):
+async def update_data(record_id, new_variable, column, user_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute(f'UPDATE birthdays SET {column} = ? WHERE id = ?',  (new_fio, record_id, ))
+        await db.execute(f'UPDATE birthdays SET {column} = ? WHERE id = ?',  (new_variable, record_id, ))
         await db.commit()
+        await apsched.modify_schedule_job(record_id, user_id, new_variable, column)
 
+async def get_all_data_to_scheduler():
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("SELECT birthdays.id, birthdays.fio, birthdays.date, users.telegram_id "
+                                  "FROM birthdays "
+                                  "JOIN users on birthdays.user_id = users.id")
+
+        all_dates = await cursor.fetchall()
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in all_dates]
+
+        for birthday in results:
+            await apsched.send_data_to_schedule(
+                birthday['date'],
+                birthday['id'],
+                birthday['fio'],
+                birthday['telegram_id']
+            )
+
+        apsched.scheduler.start()
+
+async def delete_date(record_id):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("DELETE FROM birthdays WHERE id = ?", (int(record_id), ))
+        await db.commit()
+        await apsched.delete_schedule_job(record_id)
