@@ -13,6 +13,8 @@ async def db_start():
                 "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 "fio TEXT,"
                 "date DATE,"
+                "about_user TEXT,"
+                "is_male BOOLEAN,"
                 "user_id INTEGER,"
                 "FOREIGN KEY (user_id) REFERENCES users (id))")
         await db.commit()
@@ -34,12 +36,12 @@ async def get_user_id(telegram_id):
         user_id = await cursor.fetchone()
         return user_id[0]
 
-async def add_birthday_db(fio, date, user_id, telegram_user_id):
+async def add_birthday_db(fio, date, user_id, about_user, telegram_user_id, is_male):
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("INSERT INTO birthdays (fio, date, user_id) VALUES(?, ?, ?)", (fio, date, user_id))
+        cursor = await db.execute("INSERT INTO birthdays (fio, date, user_id, about_user, is_male) VALUES(?, ?, ?, ?, ?)", (fio, date, user_id, about_user, is_male))
         await db.commit()
         id_birthday = cursor.lastrowid
-        await apsched.send_data_to_schedule(date, id_birthday, fio, telegram_user_id)
+        await apsched.send_data_to_schedule(date, id_birthday, fio, telegram_user_id, about_user, is_male)
 
 async def get_all_dates(telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -59,15 +61,15 @@ async def get_birthday(record_id):
         res = dict(zip(columns, res))
         return res
 
-async def update_data(record_id, new_variable, column, user_id):
+async def update_data(record_id, new_variable, column):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute(f'UPDATE birthdays SET {column} = ? WHERE id = ?',  (new_variable, record_id, ))
         await db.commit()
-        await apsched.modify_schedule_job(record_id, user_id, new_variable, column)
+        await apsched.modify_schedule_job(record_id, new_variable, column)
 
 async def get_all_data_to_scheduler():
     async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute("SELECT birthdays.id, birthdays.fio, birthdays.date, users.telegram_id "
+        cursor = await db.execute("SELECT birthdays.id, birthdays.fio, birthdays.date, birthdays.about_user, users.telegram_id "
                                   "FROM birthdays "
                                   "JOIN users on birthdays.user_id = users.id")
 
@@ -80,7 +82,9 @@ async def get_all_data_to_scheduler():
                 birthday['date'],
                 birthday['id'],
                 birthday['fio'],
-                birthday['telegram_id']
+                birthday['telegram_id'],
+                birthday['about_user'],
+                birthday['is_male']
             )
 
         apsched.scheduler.start()

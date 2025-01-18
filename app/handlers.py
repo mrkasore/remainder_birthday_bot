@@ -13,10 +13,13 @@ router = Router()
 class AddDate(StatesGroup):
     fio = State()
     date = State()
+    about_user = State()
+    is_male = State()
 
 class EditBirthdayState(StatesGroup):
     waiting_for_fio = State()
     waiting_for_date = State()
+    waiting_for_about_user = State()
 
 class EditCallbackData(CallbackData, prefix="edit"):
     record_id: int
@@ -52,12 +55,41 @@ async def add_fio(message: Message, state: FSMContext):
 @router.message(AddDate.date)
 async def add_date(message: Message, state: FSMContext):
     await state.update_data(date=message.text)
+    await state.set_state(AddDate.about_user)
+    await message.answer('Введите данные о человеке')
+
+@router.message(AddDate.about_user)
+async def add_about_user(message: Message, state: FSMContext):
+    await state.update_data(about_user=message.text)
+    await state.set_state(AddDate.is_male)
+    await message.answer('Выберите пол', reply_markup=kb.choose_gender)
+
+@router.callback_query(F.data == 'male')
+async def change_fio(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(is_male=True)
     data = await state.get_data()
-    user_id = await db.get_user_id(message.from_user.id)
+    user_id = await db.get_user_id(callback.from_user.id)
     if user_id:
-        await db.add_birthday_db(data["fio"], data["date"], user_id, message.from_user.id)
-        await message.answer(f'ФИО: {data["fio"]}\n'
-        f'Дата Рождения: {data["date"]}')
+        await db.add_birthday_db(data["fio"], data["date"], user_id, data["about_user"], callback.from_user.id, data["is_male"])
+        await callback.message.answer(f'ФИО: {data["fio"]}\n'
+                             f'Дата Рождения: {data["date"]}\n'
+                             f'О человеке: {data["about_user"]}\n'
+                             f'Пол: мужской')
+        await callback.answer()
+    await state.clear()
+
+@router.callback_query(F.data == 'female')
+async def change_fio(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(is_male=False)
+    data = await state.get_data()
+    user_id = await db.get_user_id(callback.from_user.id)
+    if user_id:
+        await db.add_birthday_db(data["fio"], data["date"], user_id, data["about_user"], callback.from_user.id, data["is_male"])
+        await callback.message.answer(f'ФИО: {data["fio"]}\n'
+                             f'Дата Рождения: {data["date"]}\n'
+                             f'О человеке: {data["about_user"]}\n'
+                             f'Пол: женский')
+        await callback.answer()
     await state.clear()
 
 @router.message(F.text == 'Просмотреть все даты')
@@ -89,20 +121,34 @@ async def change_date(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EditBirthdayState.waiting_for_date)
     await callback.answer()
 
+@router.callback_query(F.data == 'change_about_user')
+async def change_about_user(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text('Введите новые данные о пользователе')
+    await state.set_state(EditBirthdayState.waiting_for_about_user)
+    await callback.answer()
+
 @router.message(EditBirthdayState.waiting_for_fio)
 async def process_new_fio(message: Message, state: FSMContext):
     new_fio = message.text
     data = await state.get_data()
-    await db.update_data(data['record_id'], new_fio, 'fio', message.from_user.id)
+    await db.update_data(data['record_id'], new_fio, 'fio')
     await message.answer(f'Поле ФИО изменено на {new_fio}')
     await state.clear()
 
 @router.message(EditBirthdayState.waiting_for_date)
-async def process_new_fio(message: Message, state: FSMContext):
+async def process_new_date(message: Message, state: FSMContext):
     new_date = message.text
     data = await state.get_data()
-    await db.update_data(data['record_id'], new_date, 'date', message.from_user.id)
+    await db.update_data(data['record_id'], new_date, 'date')
     await message.answer(f'Поле даты изменено на {new_date}')
+    await state.clear()
+
+@router.message(EditBirthdayState.waiting_for_about_user)
+async def process_new_about_user(message: Message, state: FSMContext):
+    new_about_user = message.text
+    data = await state.get_data()
+    await db.update_data(data['record_id'], new_about_user, 'about_user')
+    await message.answer(f'Новые данные о пользователе:  {new_about_user}')
     await state.clear()
 
 @router.callback_query(DeleteCallbackData.filter())
@@ -119,11 +165,12 @@ async def get_current_birthday_row(birthday):
     all_keys = {
         'fio': 'ФИО',
         'date': 'Дата рождения',
+        'about_user': 'Информация о человеке'
     }
     res_row = ''
 
     for key, row in birthday.items():
-        if key in ['id', 'user_id']:
+        if key in ['id', 'user_id', 'is_male']:
             continue
         res_row += f'{all_keys[key]}: {str(row)}\n'
 

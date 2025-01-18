@@ -1,5 +1,5 @@
 import asyncio
-from aiogram import Dispatcher, Bot
+from aiogram import Dispatcher
 import logging
 
 from app.handlers import router

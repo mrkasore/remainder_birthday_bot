@@ -12,6 +12,13 @@ choose_edit = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text='Изменить ФИО', callback_data='change_fio')],
         [InlineKeyboardButton(text='Изменить дату', callback_data='change_date')],
+        [InlineKeyboardButton(text='Изменить информацию о человеке', callback_data='change_about_user')],
+    ]
+)
+
+choose_gender = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text='М', callback_data='male'), InlineKeyboardButton(text='Ж', callback_data='female')]
     ]
 )
 
