@@ -41,7 +41,12 @@ async def add_birthday_db(fio, date, user_id, about_user, telegram_user_id, is_m
         cursor = await db.execute("INSERT INTO birthdays (fio, date, user_id, about_user, is_male) VALUES(?, ?, ?, ?, ?)", (fio, date, user_id, about_user, is_male))
         await db.commit()
         id_birthday = cursor.lastrowid
-        await apsched.send_data_to_schedule(date, id_birthday, fio, telegram_user_id, about_user, is_male)
+        try:
+            await apsched.send_data_to_schedule(date, id_birthday, fio, telegram_user_id, about_user, is_male)
+            return True
+        except:
+            await delete_date(id_birthday)
+            return False
 
 async def get_all_dates(telegram_id):
     async with aiosqlite.connect(DATABASE_PATH) as db:

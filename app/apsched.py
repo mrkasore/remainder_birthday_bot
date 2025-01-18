@@ -66,4 +66,7 @@ async def modify_schedule_job(record_id, new_variable, column):
         )
 
 async def delete_schedule_job(job_id):
-    scheduler.remove_job(str(job_id))
+    try:
+        scheduler.remove_job(str(job_id))
+    except:
+        return False

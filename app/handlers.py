@@ -65,40 +65,30 @@ async def add_about_user(message: Message, state: FSMContext):
     await message.answer('Выберите пол', reply_markup=kb.choose_gender)
 
 @router.callback_query(F.data == 'male')
-async def change_fio(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(is_male=True)
-    data = await state.get_data()
-    user_id = await db.get_user_id(callback.from_user.id)
-    if user_id:
-        await db.add_birthday_db(data["fio"], data["date"], user_id, data["about_user"], callback.from_user.id, data["is_male"])
-        await callback.message.answer(f'ФИО: {data["fio"]}\n'
-                             f'Дата Рождения: {data["date"]}\n'
-                             f'О человеке: {data["about_user"]}\n'
-                             f'Пол: мужской')
-        await callback.answer()
+async def set_male(callback: CallbackQuery, state: FSMContext):
+    await set_gender(state, callback, True)
+    await callback.answer()
     await state.clear()
 
 @router.callback_query(F.data == 'female')
-async def change_fio(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(is_male=False)
-    data = await state.get_data()
-    user_id = await db.get_user_id(callback.from_user.id)
-    if user_id:
-        await db.add_birthday_db(data["fio"], data["date"], user_id, data["about_user"], callback.from_user.id, data["is_male"])
-        await callback.message.answer(f'ФИО: {data["fio"]}\n'
-                             f'Дата Рождения: {data["date"]}\n'
-                             f'О человеке: {data["about_user"]}\n'
-                             f'Пол: женский')
-        await callback.answer()
+async def set_female(callback: CallbackQuery, state: FSMContext):
+    await set_gender(state, callback, False)
+    await callback.answer()
     await state.clear()
 
 @router.message(F.text == 'Просмотреть все даты')
 async def get_all_birthdays(message: Message):
-    all_birthdays = await db.get_all_dates(message.from_user.id)
+    try:
+        all_birthdays = await db.get_all_dates(message.from_user.id)
 
-    for birthday in all_birthdays:
-        res_row = await get_current_birthday_row(birthday)
-        await message.answer(res_row, reply_markup = kb.generate_edit_keyboard(birthday['id']))
+        if all_birthdays:
+            for birthday in all_birthdays:
+                res_row = await get_current_birthday_row(birthday)
+                await message.answer(res_row, reply_markup = kb.generate_edit_keyboard(birthday['id']))
+        else:
+            await message.answer('Нет созданных записей')
+    except:
+        await message.answer('Выполните команду /start')
 
 @router.callback_query(EditCallbackData.filter())
 async def edit_birthday_callback(callback_query: CallbackQuery, callback_data: EditCallbackData, state: FSMContext):
@@ -175,3 +165,22 @@ async def get_current_birthday_row(birthday):
         res_row += f'{all_keys[key]}: {str(row)}\n'
 
     return res_row
+
+async def set_gender(state, callback, is_male):
+    try:
+        gender = 'мужской' if is_male else 'женский'
+        await state.update_data(is_male=is_male)
+        data = await state.get_data()
+        user_id = await db.get_user_id(callback.from_user.id)
+        if user_id:
+            res = await db.add_birthday_db(data["fio"], data["date"], user_id, data["about_user"], callback.from_user.id, data["is_male"])
+
+            if res:
+                await callback.message.answer(f'ФИО: {data["fio"]}\n'
+                                              f'Дата Рождения: {data["date"]}\n'
+                                              f'О человеке: {data["about_user"]}\n'
+                                              f'Пол: {gender}')
+            else:
+                raise Exception
+    except:
+        await callback.message.answer('Данные введены не корректно')
